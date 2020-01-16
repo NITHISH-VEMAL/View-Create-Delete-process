@@ -4,7 +4,7 @@
 #include <psapi.h>
 #include <iostream>
 #include <string>
-//#include "TerminateProcess.h"
+#include<WinBase.h>
 
 using namespace std;
 
@@ -12,6 +12,19 @@ using namespace std;
 static ULARGE_INTEGER lastCPU, lastSysCPU, lastUserCPU;
 static int numProcessors;
 static HANDLE self;
+
+
+//CPU usage is number of processor used -done
+//Memory usage is memory used in RAM -done
+//Disk usage is memory used in ROM   = read+write
+//Ntework usage is = send+receive
+
+
+
+//typedef IO_COUNTERS* PIO_COUNTERS;
+
+
+
 
 void start(DWORD processID) {
 
@@ -79,9 +92,26 @@ void memoryInfor(DWORD processID)
 	*/
 	start(processID);
 	printf("CPU usage is %lf\n", getCurrentValue());
-	
 
+	HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION, TRUE, processID);
+	IO_COUNTERS sticCounter = { 0 };
 
+	if (!GetProcessIoCounters(hProcess, &sticCounter))
+	{
+		cout << "invalid";
+	}
+	//cout<<"read : "<<sticCounter.ReadOperationCount;
+	//cout << " write : " << sticCounter.WriteOperationCount<<endl;
+
+	cout << "Disk usage : " << sticCounter.ReadTransferCount * 0.000000125 << "Mb" << endl;//+ sticCounter.WriteTransferCount<<endl;
+	//cout << " write transfer : " << sticCounter.WriteTransferCount << endl;
+
+	/*GetWriteOperationCount().Format(_T("Write operation: %I64d"), sticCounter.WriteOperationCount);
+	GetOtherOperationCount().Format(_T("Other operation: %I64d"), sticCounter.OtherOperationCount);
+	GetReadTransferCount().Format(_T("Read transfer: %I64d"), sticCounter.ReadTransferCount);
+	GetWriteTransferCount().Format(_T("Write transfer: %I64d"), sticCounter.WriteTransferCount);
+	GetOtherTransferCount().Format(_T("Other transfer: %I64d"), sticCounter.OtherTransferCount);
+	*/
 }
 
 void Terminate(DWORD processID)
