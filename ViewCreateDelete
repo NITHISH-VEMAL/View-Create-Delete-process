@@ -4,16 +4,78 @@
 #include <psapi.h>
 #include <iostream>
 #include <string>
-#include "TerminateProcess.h"
+//#include "TerminateProcess.h"
 
 using namespace std;
 
+
+double get_cpu_time(DWORD processID) {
+	HANDLE tmpHandle = OpenProcess(PROCESS_ALL_ACCESS, TRUE, processID);
+	FILETIME a, b, c, d;
+	if (GetProcessTimes(tmpHandle, &a, &b, &c, &d) != 0) {
+		//  Returns total user time.
+		//  Can be tweaked to include kernel times as well.
+		return
+			(double)(d.dwLowDateTime |
+			((unsigned long long)d.dwHighDateTime << 32)) * 0.0000001;
+	}
+	else {
+		//  Handle error
+		return 0;
+	}
+}
+
+
+void memoryInfor(DWORD processID)
+{
+	HANDLE tmpHandle = OpenProcess(PROCESS_ALL_ACCESS, TRUE, processID);   //open process
+	MEMORYSTATUSEX memInfo;
+	memInfo.dwLength = sizeof(MEMORYSTATUSEX);
+	GlobalMemoryStatusEx(&memInfo);
+	DWORDLONG totalVirtualMem = memInfo.ullTotalPageFile;
+	PROCESS_MEMORY_COUNTERS pmc;
+	GetProcessMemoryInfo(tmpHandle, &pmc, sizeof(pmc));
+	//SIZE_T virtualMemUsedByMe = pmc.PrivateUsage;
+	DWORDLONG totalPhysMem = memInfo.ullTotalPhys;
+	//cout << totalPhysMem;
+	SIZE_T physMemUsedByMe = pmc.WorkingSetSize;
+	cout <<"Memory used is "<< physMemUsedByMe* 0.000000125 <<"Mb"<<endl;
+
+
+	/*double start = get_cpu_time(processID);
+	double end;
+	//system("Bla.exe");
+	end = get_cpu_time(processID);
+
+	printf("Took %f seconds of CPU time\n", end - start);
+
+	//std::cin.get();
+	*/
+
+	DWORD   dwThreadId;
+	HANDLE  hThread;
+
+	int startcputime, endcputime, wcts, wcte;
+
+	startcputime = get_cpu_time(processID);
+
+	
+	WaitForSingleObject(tmpHandle, INFINITE);
+
+	endcputime = get_cpu_time(processID);
+
+	std::cout << "it took " << endcputime - startcputime << " s of CPU to execute this\n";
+
+
+
+}
+
 void Terminate(DWORD processID)
 {
-	HANDLE tmpHandle = OpenProcess(PROCESS_ALL_ACCESS, TRUE, processID);
-	if (NULL != tmpHandle)
+	HANDLE tmpHandle = OpenProcess(PROCESS_ALL_ACCESS, TRUE, processID);   //open process
+	if (NULL != tmpHandle) 
 	{
-		TerminateProcess(tmpHandle, 0);
+		TerminateProcess(tmpHandle, 0); //terminate opened process
 	}
 	CloseHandle(tmpHandle);
 }
@@ -24,7 +86,7 @@ void PrintProcessNameAndID(DWORD processID)
 
 	HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION |
 		PROCESS_VM_READ,
-		FALSE, processID);
+		FALSE, processID);     
 
 	if (NULL != hProcess)
 	{
@@ -32,14 +94,14 @@ void PrintProcessNameAndID(DWORD processID)
 		DWORD cbNeeded;
 
 		if (EnumProcessModules(hProcess, &hMod, sizeof(hMod),
-			&cbNeeded))
+			&cbNeeded))   //extract information , Retrieves a handle for each module in the specified process
 		{
 			GetModuleBaseName(hProcess, hMod, szProcessName,
-				sizeof(szProcessName) / sizeof(TCHAR));
+				sizeof(szProcessName) / sizeof(TCHAR));     //get process name and store in szprocessname
 		}
 	}
 
-	_tprintf(TEXT("%s  (PID: %u)\n"), szProcessName, processID);
+	_tprintf(TEXT("\n%s  (PID: %u)\n"), szProcessName, processID);
 
 	CloseHandle(hProcess);
 }
@@ -58,9 +120,9 @@ int main(int argc, TCHAR* argv[])
 		{
 		case 1:
 		{
-			DWORD aProcesses[1024], cbNeeded, cProcesses;
+			DWORD aProcesses[1024], cbNeeded, cProcesses;     
 			unsigned int i;
-			if (!EnumProcesses(aProcesses, sizeof(aProcesses), &cbNeeded))
+			if (!EnumProcesses(aProcesses, sizeof(aProcesses), &cbNeeded))   //to get all the process ID
 			{
 				return 1;
 			}
@@ -69,7 +131,8 @@ int main(int argc, TCHAR* argv[])
 			{
 				if (aProcesses[i] != 0)
 				{
-					PrintProcessNameAndID(aProcesses[i]);
+					PrintProcessNameAndID(aProcesses[i]);    //get process name
+					memoryInfor(aProcesses[i]);
 				}
 			}
 
@@ -77,44 +140,15 @@ int main(int argc, TCHAR* argv[])
 		}
 		case 2:
 		{
-			/*std:string s;
+			
+			std:string s;
+			cout << "Enter the process name : ";
 			cin >> s;
 			std::wstring ws;
 			ws.assign(s.begin(), s.end());
 			LPWSTR pwst = &ws[0];
-			LPCWSTR pcwstr = ws.c_str();*/
-
-			STARTUPINFO si = { 0 };
-			PROCESS_INFORMATION pi = { 0 };
-
-
-
-			BOOL creationBool = CreateProcess(TEXT("C:\\Windows\\notepad.exe"), NULL, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi);
-
-			if (creationBool)
-			{
-				cout << "Creation succesfull\n";
-				cout << "Process ID : \t"<<pi.dwProcessId<<endl;
-			}
-
-			else
-			{
-				cout << "Creation was not done\n";
-			}
-
-			WaitForSingleObject(pi.hProcess, INFINITE);
-
-			cin.get();
-			CloseHandle(pi.hThread);
-			CloseHandle(pi.hProcess);
-			/*for (i = 0; i < cProcesses; i++)
-			{
-				if (aProcesses[i] != 0)
-				{
-					PrintProcessNameAndID(aProcesses[i]);
-				}
-			}*/
-			
+			LPCWSTR pcwstr = ws.c_str();
+			ShellExecute(0, L"open", pcwstr, NULL, 0, SW_SHOW);
 			break;
 		}
 		case 3:
@@ -125,7 +159,7 @@ int main(int argc, TCHAR* argv[])
 			Terminate(processID);
 			break;
 		}
-
+		
 		}
 
 
