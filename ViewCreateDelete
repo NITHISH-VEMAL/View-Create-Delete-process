@@ -5,8 +5,17 @@
 #include <iostream>
 #include <string>
 #include<WinBase.h>
+#include <iphlpapi.h>
+#include <Tcpestats.h>
 
 using namespace std;
+
+#pragma comment(lib, "iphlpapi.lib")
+#pragma comment(lib, "ws2_32.lib")
+
+#define MALLOC(x) HeapAlloc(GetProcessHeap(), 0, (x))
+#define FREE(x) HeapFree(GetProcessHeap(), 0, (x))
+
 
 
 static ULARGE_INTEGER lastCPU, lastSysCPU, lastUserCPU;
@@ -19,25 +28,23 @@ static HANDLE self;
 //Disk usage is memory used in ROM   = read+write
 //Ntework usage is = send+receive
 
-
-
-//typedef IO_COUNTERS* PIO_COUNTERS;
-
-
-
-
 void start(DWORD processID) {
 
 	SYSTEM_INFO sysInfo;
 	FILETIME ftime, fsys, fuser;
 
 	GetSystemInfo(&sysInfo);
-	numProcessors = sysInfo.dwNumberOfProcessors;
+	numProcessors = sysInfo.dwNumberOfProcessors; //find number of processor
 
 	GetSystemTimeAsFileTime(&ftime);
 	memcpy(&lastCPU, &ftime, sizeof(FILETIME));
 
-	self = OpenProcess(PROCESS_ALL_ACCESS, TRUE, processID); ;
+
+	////////////////////////////////////////////////////////////////
+	   self = OpenProcess(PROCESS_ALL_ACCESS, TRUE, processID);   //
+	///////////////////////////////////////////////////////////////
+
+
 	GetProcessTimes(self, &ftime, &ftime, &fsys, &fuser);
 	memcpy(&lastSysCPU, &fsys, sizeof(FILETIME));
 	memcpy(&lastUserCPU, &fuser, sizeof(FILETIME));
@@ -65,33 +72,50 @@ double getCurrentValue() {
 	return percent * 100;
 }
 
-void memoryInfor(DWORD processID)
+void memoryInformation(DWORD processID)
 {
+
+	/* MEMORY USAGE */
+
+
+	// get access for both phy and virtual mem and get phy mem of specified process
+
 	HANDLE tmpHandle = OpenProcess(PROCESS_ALL_ACCESS, TRUE, processID);   //open process
-	MEMORYSTATUSEX memInfo;
+
+	MEMORYSTATUSEX memInfo;                             //information about current memory
 	memInfo.dwLength = sizeof(MEMORYSTATUSEX);
-	GlobalMemoryStatusEx(&memInfo);
-	DWORDLONG totalVirtualMem = memInfo.ullTotalPageFile;
+
+	/////////////////////////////////////////////////
+	        GlobalMemoryStatusEx(&memInfo);       //  Information of phy mem and virtual mem
+   ////////////////////////////////////////////////
+
+    
+	//DWORDLONG totalVirtualMem = memInfo.ullTotalPageFile;     
 	PROCESS_MEMORY_COUNTERS pmc;
-	GetProcessMemoryInfo(tmpHandle, &pmc, sizeof(pmc));
-	//SIZE_T virtualMemUsedByMe = pmc.PrivateUsage;
+
+	///////////////////////////////////////////////////////////////////
+	     GetProcessMemoryInfo(tmpHandle, &pmc, sizeof(pmc));        //  Retrieves information of specified process
+	/////////////////////////////////////////////////////////////////
+
+
 	DWORDLONG totalPhysMem = memInfo.ullTotalPhys;
-	//cout << totalPhysMem;
 	SIZE_T physMemUsedByMe = pmc.WorkingSetSize;
+
+
 	cout << "Memory used is " << physMemUsedByMe * 0.000000125 << "Mb" << endl;
 
 
-	/*double start = get_cpu_time(processID);
-	double end;
-	//system("Bla.exe");
-	end = get_cpu_time(processID);
+	/* CPU USAGE */
 
-	printf("Took %f seconds of CPU time\n", end - start);
+	/////////////////////////////////////////////////
+	                start(processID);             // function call
+	////////////////////////////////////////////////
 
-	//std::cin.get();
-	*/
-	start(processID);
 	printf("CPU usage is %lf\n", getCurrentValue());
+
+
+	/* DISK USAGE */
+
 
 	HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION, TRUE, processID);
 	IO_COUNTERS sticCounter = { 0 };
@@ -102,52 +126,136 @@ void memoryInfor(DWORD processID)
 	}
 	//cout<<"read : "<<sticCounter.ReadOperationCount;
 	//cout << " write : " << sticCounter.WriteOperationCount<<endl;
-
-	cout << "Disk usage : " << sticCounter.ReadTransferCount * 0.000000125 << "Mb" << endl;//+ sticCounter.WriteTransferCount<<endl;
+	cout << "Disk usage : " << sticCounter.WriteTransferCount * 0.000000125 << "Mb" << endl;//+ sticCounter.WriteTransferCount<<endl;
 	//cout << " write transfer : " << sticCounter.WriteTransferCount << endl;
 
-	/*GetWriteOperationCount().Format(_T("Write operation: %I64d"), sticCounter.WriteOperationCount);
-	GetOtherOperationCount().Format(_T("Other operation: %I64d"), sticCounter.OtherOperationCount);
-	GetReadTransferCount().Format(_T("Read transfer: %I64d"), sticCounter.ReadTransferCount);
-	GetWriteTransferCount().Format(_T("Write transfer: %I64d"), sticCounter.WriteTransferCount);
-	GetOtherTransferCount().Format(_T("Other transfer: %I64d"), sticCounter.OtherTransferCount);
-	*/
+	PMIB_TCPTABLE pTcpTable;
+	DWORD dwSize = 0;
+	DWORD dwRetVal = 0;
+
+	char szLocalAddr[128];
+	char szRemoteAddr[128];
+	pTcpTable = (MIB_TCPTABLE*)MALLOC(sizeof(MIB_TCPTABLE));
+	if (pTcpTable == NULL) {
+		printf("Error allocating memory\n");
+		
+	}
+
+	dwSize = sizeof(MIB_TCPTABLE);
+	
+	
+	// Make an initial call to GetTcpTable to
+	// get the necessary size into the dwSize variable
+	if ((dwRetVal = GetTcpTable(pTcpTable, &dwSize, TRUE)) ==ERROR_INSUFFICIENT_BUFFER)
+	{
+		FREE(pTcpTable);
+		pTcpTable = (MIB_TCPTABLE*)MALLOC(dwSize);
+		if (pTcpTable == NULL)
+		{
+			printf("Error allocating memory\n");
+		}
+	}
+
+
+	// Make a second call to GetTcpTable to get
+	// the actual data we require
+	int i;
+
+
+	if ((dwRetVal = GetTcpTable(pTcpTable, &dwSize, TRUE)) == NO_ERROR)
+	{
+		//printf("\tNumber of entries: %d\n", pTcpTable->dwNumEntries);
+		for (i = 0; i < (int)pTcpTable->dwNumEntries; i++)
+		{
+			//printf("\n\tTCP[%d] State: %ld - ", i, pTcpTable->table[i].dwState);
+
+			//printf("\tTCP[%d] Local Port: %d \n", i, ntohs((u_short)pTcpTable->table[i].dwLocalPort));
+
+			//printf("\tTCP[%d] Remote Port: %d\n", i, ntohs((u_short)pTcpTable->table[i].dwRemotePort));
+			
+			MIB_TCPROW row;
+			row.dwLocalAddr = pTcpTable->table[i].dwLocalAddr;
+			row.dwLocalPort = pTcpTable->table[i].dwLocalPort;
+			row.dwRemoteAddr = pTcpTable->table[i].dwRemoteAddr;
+			row.dwRemotePort = pTcpTable->table[i].dwRemotePort;
+			row.dwState = pTcpTable->table[i].dwState;
+			void* processRow = &row;
+
+
+			ULONG rosSize = 0, rodSize = 0;
+			ULONG winStatus;
+			PUCHAR ros = NULL, rod = NULL;
+			rodSize = sizeof(TCP_ESTATS_DATA_ROD_v0);
+			PTCP_ESTATS_DATA_ROD_v0 dataRod = { 0 };
+
+			///////////////////////////////////////////////
+			// winStatus = GetPerTcpConnectionEStats((PMIB_TCPROW)&row, TcpConnectionEstatsData, NULL, 0, 0, ros, 0, rosSize, rod, 0, rodSize);
+			//////////////////////////////////////////////
+
+
+			//dataRod = (PTCP_ESTATS_DATA_ROD_v0)rod;
+			//cout<<dataRod->DataBytesIn;
+			//cout << dataRod->DataBytesOut;
+		}
+	}
+
+	
+
 }
 
 void Terminate(DWORD processID)
 {
-	HANDLE tmpHandle = OpenProcess(PROCESS_ALL_ACCESS, TRUE, processID);   //open process
-	if (NULL != tmpHandle)
-	{
-		TerminateProcess(tmpHandle, 0); //terminate opened process
+
+	//////////////////////////////////////////////////////////////////////////////////
+	        HANDLE tmpHandle = OpenProcess(PROCESS_ALL_ACCESS, TRUE, processID);   //  handle for each process
+   /////////////////////////////////////////////////////////////////////////////////
+	
+			
+    if (NULL != tmpHandle)
+	{ 
+		//////////////////////////////////////
+		   TerminateProcess(tmpHandle, 0); //    terminate process
+       /////////////////////////////////////
 	}
-	CloseHandle(tmpHandle);
+
+	if (CloseHandle(tmpHandle)) { return; }
+	
 }
 
 void PrintProcessNameAndID(DWORD processID)
 {
-	TCHAR szProcessName[MAX_PATH] = TEXT("<unknown>");
+	TCHAR szProcessName[MAX_PATH] = TEXT("<unknown>");  //enter as unknown for all process initially
 
-	HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION |
-		PROCESS_VM_READ,
-		FALSE, processID);
+
+	//////////////////////////////////////////////////////////////////////////////////////////////////
+	 HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,FALSE, processID);  //   provide an abstraction of a resource
+   /////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 	if (NULL != hProcess)
 	{
 		HMODULE hMod;
 		DWORD cbNeeded;
-
-		if (EnumProcessModules(hProcess, &hMod, sizeof(hMod),
-			&cbNeeded))   //extract information , Retrieves a handle for each module in the specified process
+		////////////////////////////////////////////////////////////////////
+		if (EnumProcessModules(hProcess,&hMod,sizeof(hMod),&cbNeeded))   // handle for each module in the specified process
+		//////////////////////////////////////////////////////////////////
 		{
-			GetModuleBaseName(hProcess, hMod, szProcessName,
-				sizeof(szProcessName) / sizeof(TCHAR));     //get process name and store in szprocessname
+
+
+	     ///////////////////////////////////////////////////////////////////////////////////////////
+			GetModuleBaseName(hProcess,hMod,szProcessName,sizeof(szProcessName)/sizeof(TCHAR));  //   get process name and store in szprocessname
+		//////////////////////////////////////////////////////////////////////////////////////////
+		
+		
 		}
 	}
 
-	_tprintf(TEXT("\n%s  (PID: %u)\n"), szProcessName, processID);
-
-	CloseHandle(hProcess);
+	cout<<"Process name :" << szProcessName <<"ID :"<< processID << endl;
+	
+	if (CloseHandle(hProcess))
+	{
+		return;
+	}
 }
 
 int main(int argc, TCHAR* argv[])
@@ -162,47 +270,95 @@ int main(int argc, TCHAR* argv[])
 
 		switch (getOption)
 		{
+
+
+		// case 1 to view all process
 		case 1:
 		{
+
 			DWORD aProcesses[1024], cbNeeded, cProcesses;
 			unsigned int i;
-			if (!EnumProcesses(aProcesses, sizeof(aProcesses), &cbNeeded))   //to get all the process ID
-			{
+			////////////////////////////////////////////////////////////////////
+			if (!EnumProcesses(aProcesses, sizeof(aProcesses), &cbNeeded))   //     to get all the process ID
+			///////////////////////////////////////////////////////////////////
+			{                                                          
 				return 1;
 			}
-			cProcesses = cbNeeded / sizeof(DWORD);
+			
+
+
+			cProcesses = cbNeeded / sizeof(DWORD);   //to find no. of 
+
+
+
 			for (i = 0; i < cProcesses; i++)
 			{
 				if (aProcesses[i] != 0)
 				{
-					PrintProcessNameAndID(aProcesses[i]);    //get process name
-					memoryInfor(aProcesses[i]);
+					/////////////////////////////////////////////
+					   PrintProcessNameAndID(aProcesses[i]);  //        to get process name
+					///////////////////////////////////////////
+					   
+					   memoryInformation(aProcesses[i]);
 				}
 			}
 
 			break;
 		}
+
+
+
+		//case 2 to start new process
 		case 2:
 		{
 
-		std:string s;
+
+
+			///////////////////////////////////////////////////////////////////
+			string processName;
 			cout << "Enter the process name : ";
-			cin >> s;
-			std::wstring ws;
-			ws.assign(s.begin(), s.end());
+			cin >> processName;
+			std::wstring ws;                                                   // convert string to LPCWSTR
+			ws.assign(processName.begin(), processName.end());
 			LPWSTR pwst = &ws[0];
 			LPCWSTR pcwstr = ws.c_str();
-			ShellExecute(0, L"open", pcwstr, NULL, 0, SW_SHOW);
+			///////////////////////////////////////////////////////////////////
+
+
+
+
+			/////////////////////////////////////////////////////////////////////
+			        ShellExecute(0, L"open", pcwstr, NULL, 0, SW_SHOW);       //   to open the process
+		   ////////////////////////////////////////////////////////////////////
+
+
+
 			break;
 		}
+
+
+
+
 		case 3:
 		{
+
+
 			cout << "Enter the process ID to be deleted : ";
 			DWORD processID;
 			cin >> processID;
-			Terminate(processID);
+
+
+			////////////////////////////////
+			    Terminate(processID);    //   terminate process function
+		       ////////////////////////////////
+
+
 			break;
+		
+		
 		}
+
+
 
 		}
 
