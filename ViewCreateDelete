@@ -1,3 +1,7 @@
+
+
+#include <winsock2.h>
+#include <Ws2tcpip.h>
 #include <windows.h>
 #include <stdio.h>
 #include <tchar.h>
@@ -8,6 +12,8 @@
 #include <iphlpapi.h>
 #include <Tcpestats.h>
 
+
+
 using namespace std;
 
 #pragma comment(lib, "iphlpapi.lib")
@@ -15,8 +21,6 @@ using namespace std;
 
 #define MALLOC(x) HeapAlloc(GetProcessHeap(), 0, (x))
 #define FREE(x) HeapFree(GetProcessHeap(), 0, (x))
-
-
 
 static ULARGE_INTEGER lastCPU, lastSysCPU, lastUserCPU;
 static int numProcessors;
@@ -61,8 +65,7 @@ double getCurrentValue() {
 	GetProcessTimes(self, &ftime, &ftime, &fsys, &fuser);
 	memcpy(&sys, &fsys, sizeof(FILETIME));
 	memcpy(&user, &fuser, sizeof(FILETIME));
-	percent = (sys.QuadPart - lastSysCPU.QuadPart) +
-		(user.QuadPart - lastUserCPU.QuadPart);
+	percent = (sys.QuadPart - lastSysCPU.QuadPart) +(user.QuadPart - lastUserCPU.QuadPart);
 	percent /= (now.QuadPart - lastCPU.QuadPart);
 	percent /= numProcessors;
 	lastCPU = now;
@@ -185,17 +188,60 @@ void memoryInformation(DWORD processID)
 			ULONG rosSize = 0, rodSize = 0;
 			ULONG winStatus;
 			PUCHAR ros = NULL, rod = NULL;
-			rodSize = sizeof(TCP_ESTATS_DATA_ROD_v0);
+			//rodSize = sizeof(TCP_ESTATS_DATA_ROD_v0);
+
+			
+
 			PTCP_ESTATS_DATA_ROD_v0 dataRod = { 0 };
+			rodSize = sizeof(TCP_ESTATS_DATA_ROD_v0);
+			//PTCP_ESTATS_DATA_ROD_v0 dataRod = { 0 };
+
+			if (rosSize != 0) {
+				ros = (PUCHAR)malloc(rosSize);
+				if (ros == NULL) {
+					wprintf(L"\nOut of memory");
+					return;
+				}
+				else
+					memset(ros, 0, rosSize); // zero the buffer
+			}
+			if (rodSize != 0) {
+				rod = (PUCHAR)malloc(rodSize);
+				if (rod == NULL) {
+					free(ros);
+					wprintf(L"\nOut of memory");
+					return;
+				}
+				else
+					memset(rod, 0, rodSize); // zero the buffer
+			}
+
 
 			///////////////////////////////////////////////
-			// winStatus = GetPerTcpConnectionEStats((PMIB_TCPROW)&row, TcpConnectionEstatsData, NULL, 0, 0, ros, 0, rosSize, rod, 0, rodSize);
+			 winStatus = GetPerTcpConnectionEStats((PMIB_TCPROW)&row, TcpConnectionEstatsData, NULL, 0, 0, ros, 0, rosSize, rod, 0, rodSize);
 			//////////////////////////////////////////////
 
 
-			//dataRod = (PTCP_ESTATS_DATA_ROD_v0)rod;
-			//cout<<dataRod->DataBytesIn;
-			//cout << dataRod->DataBytesOut;
+
+			/* IPHLPAPI_DLL_LINKAGE ULONG GetPerTcpConnectionEStats(
+				 PMIB_TCPROW     Row,
+				 TCP_ESTATS_TYPE EstatsType,
+				 PUCHAR          Rw,
+				 ULONG           RwVersion,
+				 ULONG           RwSize,
+				 PUCHAR          Ros,
+				 ULONG           RosVersion,
+				 ULONG           RosSize,
+				 PUCHAR          Rod,
+				 ULONG           RodVersion,
+				 ULONG           RodSize
+			 ); */
+
+
+
+			dataRod = (PTCP_ESTATS_DATA_ROD_v0)rod;
+			//cout<<dataRod->DataBytesIn<<endl;
+			cout << dataRod->DataBytesOut<< endl<<endl;
 		}
 	}
 
@@ -350,7 +396,7 @@ int main(int argc, TCHAR* argv[])
 
 			////////////////////////////////
 			    Terminate(processID);    //   terminate process function
-		       ////////////////////////////////
+		  ////////////////////////////////
 
 
 			break;
